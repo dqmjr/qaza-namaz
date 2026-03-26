@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: qaza_namaz
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - qaza_namaz_pgdata:/var/lib/postgresql/data
+
+volumes:
+  qaza_namaz_pgdata:
+
