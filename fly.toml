@@ -1,0 +1,22 @@
+# fly.toml app configuration file generated for qaza-namaz-bot-damir-aged-star-3049 on 2026-03-27T15:14:53+05:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'qaza-namaz-bot-damir-aged-star-3049'
+primary_region = 'fra'
+
+[build]
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = 'off'
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ['app']
+
+[[vm]]
+  memory = '1gb'
+  cpus = 1
+  memory_mb = 1024
