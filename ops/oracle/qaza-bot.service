@@ -1,0 +1,18 @@
+[Unit]
+Description=Qaza Namaz Telegram Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=qaza
+Group=qaza
+WorkingDirectory=/opt/qaza-namaz
+EnvironmentFile=/opt/qaza-namaz/.env
+ExecStart=/usr/bin/npm run start
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,19 @@
+services:
+  - type: worker
+    name: qaza-namaz-bot
+    runtime: node
+    plan: free
+    autoDeploy: true
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DEFAULT_LANGUAGE
+        value: ru
+      - key: ENABLE_CUSTOM_STRATEGY
+        value: "0"
+      - key: TZ
+        value: Asia/Almaty

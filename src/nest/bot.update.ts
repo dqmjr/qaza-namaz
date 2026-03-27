@@ -314,7 +314,16 @@ export class BotUpdate {
 
     const kb = Markup.inlineKeyboard([
       [Markup.button.callback(`✅ +30 (${prayerName})`, 'cycle:done')],
-      [Markup.button.callback(lang === 'kk' ? '➕ Қолмен енгізу' : '➕ Ввести вручную', 'cycle:manual')],
+      [
+        Markup.button.callback('➕1', 'cycle:add:1'),
+        Markup.button.callback('➕5', 'cycle:add:5'),
+        Markup.button.callback('➕10', 'cycle:add:10'),
+      ],
+      [
+        Markup.button.callback(t(lang, 'cycle.btn.manual'), 'cycle:manual'),
+        Markup.button.callback(t(lang, 'cycle.btn.refresh'), 'cycle:refresh'),
+      ],
+      [Markup.button.callback(t(lang, 'cycle.btn.report'), 'cycle:report')],
     ]);
 
     await ctx.reply(text, kb);
@@ -329,6 +338,77 @@ export class BotUpdate {
     ctx.session.setupStep = 'cycle_manual';
     await ctx.answerCbQuery();
     await ctx.reply(t(lang, 'cycle.manual.ask'));
+  }
+
+  @Action('cycle:refresh')
+  async cycleRefresh(@Ctx() ctx: any) {
+    await ctx.answerCbQuery();
+    await this.checkin(ctx);
+  }
+
+  @Action('cycle:report')
+  async cycleReport(@Ctx() ctx: any) {
+    await ctx.answerCbQuery();
+    await this.reportStub(ctx);
+  }
+
+  @Action(/^cycle:add:(\d+)$/)
+  async cycleQuickAdd(@Ctx() ctx: any) {
+    const tid = this.tid(ctx);
+    const lang = await this.users.getLanguage(tid);
+    const n = Number.parseInt(String(ctx.match?.[1]), 10);
+    if (!Number.isFinite(n) || n <= 0) {
+      await ctx.answerCbQuery();
+      return;
+    }
+
+    const state = await this.users.getMethodState(tid);
+    if (!state.selected_years || state.selected_years <= 0) {
+      await ctx.answerCbQuery();
+      await this.setup(ctx);
+      return;
+    }
+
+    const d = await this.users.deductFromCurrentPrayer(tid, n);
+    await ctx.answerCbQuery();
+    if (d.deducted <= 0) {
+      const adv = await this.users.advance12DayCycle(tid, { incrementDay: false });
+      if (adv.switched) {
+        const prayerName = this.prayerName(lang, adv.prayer);
+        const nextName = this.prayerName(lang, adv.nextPrayer);
+        await ctx.reply(
+          t(lang, 'cycle.switched').replace('{prayer}', prayerName).replace('{next}', nextName),
+        );
+        await ctx.reply(t(lang, 'cycle.niyyah').replace('{prayer}', nextName));
+        await this.checkin(ctx);
+        return;
+      }
+      await ctx.reply(
+        lang === 'kk'
+          ? 'Қаза толық жабылған сияқты ✅ /report арқылы тексеріп көріңіз.'
+          : 'Похоже, долг уже полностью закрыт ✅ Проверьте через /report.',
+      );
+      return;
+    }
+
+    await this.checkins.addPrayerToToday(tid, state.current_prayer, d.deducted);
+    await ctx.reply(
+      t(lang, 'cycle.deducted')
+        .replace('{prayer}', this.prayerName(lang, state.current_prayer))
+        .replace('{n}', String(d.deducted))
+        .replace('{left}', String(d.remainingPrayer)),
+    );
+
+    const adv = await this.users.advance12DayCycle(tid, { incrementDay: false });
+    if (adv.switched) {
+      const prayerName = this.prayerName(lang, adv.prayer);
+      const nextName = this.prayerName(lang, adv.nextPrayer);
+      await ctx.reply(
+        t(lang, 'cycle.switched').replace('{prayer}', prayerName).replace('{next}', nextName),
+      );
+      await ctx.reply(t(lang, 'cycle.niyyah').replace('{prayer}', nextName));
+    }
+    await this.checkin(ctx);
   }
 
   @Action('cycle:done')
