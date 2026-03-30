@@ -254,6 +254,22 @@ export class UserService {
     return { deducted, prayer: state.current_prayer, remainingPrayer, debt: nextDebt };
   }
 
+  async undoDeduction(
+    telegramId: string,
+    prayer: PrayerKey,
+    amount: number,
+  ): Promise<void> {
+    const n = Math.max(0, Math.floor(amount));
+    if (!n) return;
+    await this.db.query(
+      `UPDATE users
+       SET ${`debt_${prayer}`} = ${`debt_${prayer}`} + $1,
+           total_completed_prayers = GREATEST(0, COALESCE(total_completed_prayers, 0) - $1)
+       WHERE telegram_id = $2`,
+      [n, telegramId],
+    );
+  }
+
   async advance12DayCycle(
     telegramId: string,
     options?: { incrementDay?: boolean },

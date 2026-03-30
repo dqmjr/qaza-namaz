@@ -45,6 +45,12 @@ export class BotUpdate {
     return 'Иша';
   }
 
+  private rakahFard(key: string): number {
+    if (key === 'fajr') return 2;
+    if (key === 'maghrib') return 3;
+    return 4;
+  }
+
   private mainMenu(lang: 'kk' | 'ru') {
     return Markup.keyboard([
       [t(lang, 'menu.setup'), t(lang, 'menu.checkin')],
@@ -55,6 +61,56 @@ export class BotUpdate {
 
   private async showMenu(ctx: any, lang: 'kk' | 'ru') {
     await ctx.reply(t(lang, 'menu.title'), this.mainMenu(lang));
+  }
+
+  private settingsMenu(lang: 'kk' | 'ru') {
+    return Markup.inlineKeyboard([
+      [Markup.button.callback(t(lang, 'settings.lang'), 'settings:lang')],
+      [Markup.button.callback(t(lang, 'settings.years'), 'settings:years')],
+      [Markup.button.callback(t(lang, 'settings.reminders'), 'settings:reminders')],
+      [Markup.button.callback(t(lang, 'settings.back'), 'settings:back')],
+    ]);
+  }
+
+  @Command('settings')
+  async settings(@Ctx() ctx: any) {
+    const tid = this.tid(ctx);
+    const lang = await this.users.getLanguage(tid);
+    await ctx.reply(t(lang, 'settings.title'), this.settingsMenu(lang));
+  }
+
+  @Action('settings:back')
+  async settingsBack(@Ctx() ctx: any) {
+    const tid = this.tid(ctx);
+    const lang = await this.users.getLanguage(tid);
+    await ctx.answerCbQuery();
+    await this.showMenu(ctx, lang);
+  }
+
+  @Action('settings:lang')
+  async settingsLang(@Ctx() ctx: any) {
+    const tid = this.tid(ctx);
+    const lang = await this.users.getLanguage(tid);
+    await ctx.answerCbQuery();
+    await ctx.reply(t(lang, 'start.language'), LanguageKeyboard);
+  }
+
+  @Action('settings:years')
+  async settingsYears(@Ctx() ctx: any) {
+    await ctx.answerCbQuery();
+    await this.setup(ctx);
+  }
+
+  @Action('settings:reminders')
+  async settingsReminders(@Ctx() ctx: any) {
+    const tid = this.tid(ctx);
+    const lang = await this.users.getLanguage(tid);
+    await ctx.answerCbQuery();
+    await ctx.reply(
+      lang === 'kk'
+        ? '⏰ Еске салу баптауы кейін қосылады (келесі update).'
+        : '⏰ Настройка напоминаний добавим позже (в следующем update).',
+    );
   }
 
   private monthTitle(lang: 'kk' | 'ru', date: dayjs.Dayjs): string {
@@ -242,7 +298,6 @@ export class BotUpdate {
     } else {
       await this.checkin(ctx);
     }
-    await this.showMenu(ctx, lang);
   }
 
   @Command('setup')
@@ -254,7 +309,6 @@ export class BotUpdate {
     ctx.session.setupStep = 'years';
     await ctx.reply(t(lang, 'setup.years.ask'));
     await ctx.reply(t(lang, 'setup.years.info'));
-    await this.showMenu(ctx, lang);
   }
 
   @Command('start12')
@@ -265,16 +319,83 @@ export class BotUpdate {
 
   @Command('method')
   async method(@Ctx() ctx: Context) {
-    const lang = await this.users.getLanguage(this.tid(ctx));
-    await ctx.reply(this.makruhWarningHtml(lang), {
-      parse_mode: 'HTML',
-    });
+    const tid = this.tid(ctx);
+    const lang = await this.users.getLanguage(tid);
+    const state = await this.users.getMethodState(tid);
+    const prayerKey = state?.current_prayer ?? 'fajr';
+    const prayerName = this.prayerName(lang, prayerKey);
+    const rakah = this.rakahFard(prayerKey);
+
+    await ctx.reply(this.makruhWarningHtml(lang), { parse_mode: 'HTML' });
+
     const text =
       lang === 'kk'
-        ? `📚 12 КҮН = 1 ЖЫЛ ӘДІСІ\n\nБұл әдіс қаза намаздарды рет-ретімен, жүйелі түрде өтеуге көмектеседі.\n\n🧭 Қалай орындалады:\n1) Бір намаз түрін фокусқа аласыз (мысалы: Таң)\n2) Әр парыз намаздан кейін сол намаздың қазасын 6 рет оқисыз\n3) Күніне барлығы: 6×5 = 30 қаза\n4) 12 күнде: 360 қаза (шамамен 1 жыл)\n5) 12 күн аяқталса, бот сізді автоматты түрде келесі намазға ауыстырады\n\n✅ Бот сізге не көрсетеді:\n• Қазір қай намазды өтеп жатқаныңызды\n• Бүгін қанша шегерілгенін\n• Сол намаздан қанша қалғанын\n• Жалпы қалған қаза санын\n\n📝 Ниет үлгісі:\n«Ниет еттім қаза болған ең соңғы {prayer} намазын өтемекке»\n\n⚠️ Ескерту:\n• Мәкрүһ уақыттарда қаза намаз оқылмайды\n• Бұл бот діни үкім шығармайды\n• Фиқһ мәселесінде өз ұстазыңыздың кеңесін ұстаныңыз\n\n🤲 Ниетіңізге береке берсін. Аз-аздан болса да тұрақты жалғастыру ең маңыздысы.`
-        : `📚 МЕТОД «12 ДНЕЙ = 1 ГОД»\n\nЭтот метод помогает закрывать къаза-намазы последовательно и без перегруза.\n\n🧭 Как это работает:\n1) Вы выбираете один намаз для текущего этапа (например: Фаджр)\n2) После каждого фард-намаза читаете 6 къаза этого же намаза\n3) В день получается: 6×5 = 30 къаза\n4) За 12 дней: 360 къаза (примерно 1 год)\n5) После 12 дней бот автоматически переключает вас на следующий намаз\n\n✅ Что показывает бот:\n• Какой намаз сейчас в фокусе\n• Сколько списалось сегодня\n• Сколько осталось по текущему намазу\n• Общий оставшийся долг\n\n📝 Пример намерения:\n«Намерился возместить последний пропущенный {prayer} намаз»\n\n⚠️ Важно:\n• В макрух-времена къаза-намазы не совершаются\n• Бот не выносит религиозных постановлений\n• В вопросах фикха следуйте своему учёному\n\n🤲 Пусть Аллах даст вам стойкость. Главное - регулярность, даже небольшими шагами.`;
+        ? [
+            '📚 12 КҮНДІК ЦИКЛ (ТҮСІНІКТІ НҰСҚА)',
+            '',
+            'Бұл әдіс қаза намаздарды рет-ретімен, жүйелі түрде өтеуге көмектеседі.',
+            '',
+            'ℹ️ Нақты түсінік:',
+            '• 12 күн — бір ғана намаз түрінің (мысалы: Таң) қазасын жабуға бағытталады',
+            '• 5 уақыттың бәрі бойынша 1 жылдық қазаны жабуға жуық мерзім: ≈ 2 ай',
+            '',
+            '🧭 Қалай орындалады:',
+            '1) Бір күнде бір намаз түрін фокусқа аласыз (мысалы: Таң)',
+            '2) Әр парыз намаздан кейін сол намаздың қазасын 6 рет оқисыз',
+            '3) Бір күндік норма: 6 намаз × 5 уақыт = 30 қаза',
+            '4) 12 күн бойы бір намаздың қазасын өтесеңіз: 360 қаза намаз болады, және ол шамамен ≈ 1 жылдық сол намаздың қазасына тең',
+            '5) 12 күн аяқталса, бот сізді автоматты түрде келесі намазға ауыстырады',
+            '',
+            '✅ Бот сізге не көрсетеді:',
+            '• Қазір қай намазды өтеп жатқаныңызды',
+            '• Бүгін қанша шегерілгенін',
+            '• Сол намаздан қанша қалғанын',
+            '• Жалпы қалған қаза санын',
+            '',
+            '📝 Ниет үлгісі:',
+            `«Ниет еттім Алла разылығы үшін қаза болған ең соңғы ${prayerName} намазының ${rakah} рәкағат парызын оқуға, жүзімді қараттым құбылаға»`,
+            '',
+            '⚠️ Ескерту:',
+            '• Мәкрүһ уақыттарда қаза намаз оқылмайды',
+            '• Бұл бот тек есеп және мотивация үшін. Діни үкім шығармайды',
+            '• Фиқһ мәселесінде өз ұстазыңыздың кеңесін ұстаныңыз',
+            '',
+            '🤲 Ниетіңізге береке берсін. Аз-аздан болса да тұрақты жалғастыру ең маңыздысы.',
+          ].join('\n')
+        : [
+            '📚 ЦИКЛ НА 12 ДНЕЙ (ПОНЯТНОЕ ОБЪЯСНЕНИЕ)',
+            '',
+            'Этот метод помогает закрывать къаза-намазы последовательно и без перегруза.',
+            '',
+            'ℹ️ Важно понимать:',
+            '• 12 дней — это про один вид намаза (например: Фаджр)',
+            '• Примерный срок, чтобы закрывать 1 год къаза по всем 5 намазам: ≈ 2 месяца',
+            '',
+            '🧭 Как это работает:',
+            '1) Один день — фокус на одном виде намаза (например: Фаджр)',
+            '2) После каждого фард-намаза читаете 6 къаза этого же намаза',
+            '3) Норма на день: 6 намазов × 5 времен = 30 къаза',
+            '4) Если 12 дней подряд закрывать къаза одного намаза: получится 360 къаза-намазов, и это примерно ≈ 1 год къаза этого намаза',
+            '5) После 12 дней бот автоматически переключает вас на следующий намаз',
+            '',
+            '✅ Что показывает бот:',
+            '• Какой намаз сейчас в фокусе',
+            '• Сколько списалось сегодня',
+            '• Сколько осталось по текущему намазу',
+            '• Общий оставшийся долг',
+            '',
+            '📝 Пример намерения:',
+            `«Я намереваюсь возместить последний пропущенный фард намаз ${prayerName} (${rakah} ракаата) ради Аллаха, обратившись лицом к кибле»`,
+            '',
+            '⚠️ Важно:',
+            '• В макрух-времена къаза-намазы не совершаются',
+            '• Бот не выносит религиозных постановлений',
+            '• В вопросах фикха следуйте своему учёному',
+            '',
+            '🤲 Пусть Аллах даст вам стойкость. Главное — регулярность, даже небольшими шагами.',
+          ].join('\n');
+
     await ctx.reply(text);
-    await this.showMenu(ctx, lang);
   }
 
   @Command('checkin')
@@ -287,6 +408,17 @@ export class BotUpdate {
       return;
     }
     let debt = await this.users.getDebtState(tid);
+    if (debt.remainingTotal <= 0) {
+      await ctx.reply(t(lang, 'done.all'));
+      return;
+    }
+    const last = await this.checkins.getLastCheckinDate(tid);
+    if (last) {
+      const diffDays = dayjs().diff(dayjs(last), 'day');
+      if (diffDays >= 2) {
+        await ctx.reply(t(lang, 'nudge.missed').replace('{date}', last));
+      }
+    }
     if (debt.remainingTotal > 0 && debt[state.current_prayer] <= 0) {
       const adv = await this.users.advance12DayCycle(tid, { incrementDay: false });
       if (adv.switched) {
@@ -295,15 +427,16 @@ export class BotUpdate {
         await ctx.reply(
           t(lang, 'cycle.switched').replace('{prayer}', prayerName).replace('{next}', nextName),
         );
-        await ctx.reply(t(lang, 'cycle.niyyah').replace('{prayer}', nextName));
       }
       state = await this.users.getMethodState(tid);
       debt = await this.users.getDebtState(tid);
     }
     const prayerName = this.prayerName(lang, state.current_prayer);
+    const rakah = this.rakahFard(state.current_prayer);
 
     const text = t(lang, 'cycle.status')
-      .replace('{prayer}', prayerName)
+      .replaceAll('{prayer}', prayerName)
+      .replaceAll('{rakah}', String(rakah))
       .replace('{day}', String(Math.max(0, state.cycle_day)))
       .replace('{fajr}', String(debt.fajr))
       .replace('{dhuhr}', String(debt.dhuhr))
@@ -312,22 +445,27 @@ export class BotUpdate {
       .replace('{isha}', String(debt.isha))
       .replace('{total}', String(debt.remainingTotal));
 
+    const niyyah = t(lang, 'cycle.niyyah')
+      .replaceAll('{prayer}', prayerName)
+      .replaceAll('{rakah}', String(rakah));
+
     const kb = Markup.inlineKeyboard([
-      [Markup.button.callback(`✅ +30 (${prayerName})`, 'cycle:done')],
+      [Markup.button.callback(`✅ +30 рәкағат (${prayerName})`, 'cycle:done')],
+      [Markup.button.callback(t(lang, 'cycle.btn.yesterday') + ' +30 рәкағат', 'cycle:yesterday:30')],
       [
-        Markup.button.callback('➕1', 'cycle:add:1'),
-        Markup.button.callback('➕5', 'cycle:add:5'),
-        Markup.button.callback('➕10', 'cycle:add:10'),
+        Markup.button.callback('➕1 рәкағат', 'cycle:add:1'),
+        Markup.button.callback('➕5 рәкағат', 'cycle:add:5'),
+        Markup.button.callback('➕10 рәкағат', 'cycle:add:10'),
       ],
       [
         Markup.button.callback(t(lang, 'cycle.btn.manual'), 'cycle:manual'),
+        Markup.button.callback(t(lang, 'cycle.btn.undo'), 'cycle:undo'),
         Markup.button.callback(t(lang, 'cycle.btn.refresh'), 'cycle:refresh'),
       ],
       [Markup.button.callback(t(lang, 'cycle.btn.report'), 'cycle:report')],
     ]);
 
-    await ctx.reply(text, kb);
-    await this.showMenu(ctx, lang);
+    await ctx.reply(`${text}\n\n${niyyah}`, kb);
   }
 
   @Action('cycle:manual')
@@ -337,7 +475,65 @@ export class BotUpdate {
     ctx.session = ctx.session ?? {};
     ctx.session.setupStep = 'cycle_manual';
     await ctx.answerCbQuery();
+    ctx.session.manualDateYmd = dayjs().format('YYYY-MM-DD');
     await ctx.reply(t(lang, 'cycle.manual.ask'));
+  }
+
+  @Action(/^cycle:yesterday:(\d+)$/)
+  async cycleYesterday(@Ctx() ctx: any) {
+    const tid = this.tid(ctx);
+    const lang = await this.users.getLanguage(tid);
+    const n = Number.parseInt(String(ctx.match?.[1]), 10);
+    await ctx.answerCbQuery();
+    if (!Number.isFinite(n) || n <= 0) return;
+    const state = await this.users.getMethodState(tid);
+    const dateYmd = dayjs().subtract(1, 'day').format('YYYY-MM-DD');
+    const d = await this.users.deductFromCurrentPrayer(tid, n);
+    if (d.deducted <= 0) {
+      await ctx.reply(t(lang, 'cycle.undo.none'));
+      return;
+    }
+    await this.checkins.addPrayerByDate(tid, dateYmd, state.current_prayer, d.deducted);
+    ctx.session = ctx.session ?? {};
+    ctx.session.lastAction = { prayer: state.current_prayer, n: d.deducted, dateYmd };
+    await ctx.reply(
+      t(lang, 'cycle.deducted')
+        .replace('{prayer}', this.prayerName(lang, state.current_prayer))
+        .replace('{n}', String(d.deducted))
+        .replace('{left}', String(d.remainingPrayer)),
+    );
+    // Only advance 12-day progress when a full +30 is done.
+    const adv = await this.users.advance12DayCycle(tid, { incrementDay: d.deducted >= 30 });
+    if (adv.switched) {
+      const p = this.prayerName(lang, adv.prayer);
+      const next = this.prayerName(lang, adv.nextPrayer);
+      await ctx.reply(t(lang, 'cycle.switched').replace('{prayer}', p).replace('{next}', next));
+    }
+    await this.checkin(ctx);
+  }
+
+  @Action('cycle:undo')
+  async cycleUndo(@Ctx() ctx: any) {
+    const tid = this.tid(ctx);
+    const lang = await this.users.getLanguage(tid);
+    ctx.session = ctx.session ?? {};
+    const last = ctx.session.lastAction as { prayer: any; n: number; dateYmd: string } | undefined;
+    await ctx.answerCbQuery();
+    if (!last || !last.prayer || !last.n || !last.dateYmd) {
+      await ctx.reply(t(lang, 'cycle.undo.none'));
+      return;
+    }
+    const prayer = String(last.prayer);
+    if (!['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'].includes(prayer)) {
+      delete ctx.session.lastAction;
+      await ctx.reply(t(lang, 'cycle.undo.none'));
+      return;
+    }
+    await this.users.undoDeduction(tid, prayer as any, last.n);
+    await this.checkins.addPrayerByDate(tid, last.dateYmd, prayer as any, -last.n);
+    delete ctx.session.lastAction;
+    await ctx.reply(t(lang, 'cycle.undo.done'));
+    await this.checkin(ctx);
   }
 
   @Action('cycle:refresh')
@@ -379,7 +575,6 @@ export class BotUpdate {
         await ctx.reply(
           t(lang, 'cycle.switched').replace('{prayer}', prayerName).replace('{next}', nextName),
         );
-        await ctx.reply(t(lang, 'cycle.niyyah').replace('{prayer}', nextName));
         await this.checkin(ctx);
         return;
       }
@@ -392,6 +587,12 @@ export class BotUpdate {
     }
 
     await this.checkins.addPrayerToToday(tid, state.current_prayer, d.deducted);
+    ctx.session = ctx.session ?? {};
+    ctx.session.lastAction = {
+      prayer: state.current_prayer,
+      n: d.deducted,
+      dateYmd: dayjs().format('YYYY-MM-DD'),
+    };
     await ctx.reply(
       t(lang, 'cycle.deducted')
         .replace('{prayer}', this.prayerName(lang, state.current_prayer))
@@ -406,7 +607,6 @@ export class BotUpdate {
       await ctx.reply(
         t(lang, 'cycle.switched').replace('{prayer}', prayerName).replace('{next}', nextName),
       );
-      await ctx.reply(t(lang, 'cycle.niyyah').replace('{prayer}', nextName));
     }
     await this.checkin(ctx);
   }
@@ -432,7 +632,6 @@ export class BotUpdate {
         await ctx.reply(
           t(lang, 'cycle.switched').replace('{prayer}', prayerName).replace('{next}', nextName),
         );
-        await ctx.reply(t(lang, 'cycle.niyyah').replace('{prayer}', nextName));
         await this.checkin(ctx);
         return;
       }
@@ -444,10 +643,23 @@ export class BotUpdate {
       return;
     }
     await this.checkins.addPrayerToToday(tid, state.current_prayer, d.deducted);
-    const adv = await this.users.advance12DayCycle(tid, { incrementDay: true });
+    ctx.session = ctx.session ?? {};
+    ctx.session.lastAction = {
+      prayer: state.current_prayer,
+      n: d.deducted,
+      dateYmd: dayjs().format('YYYY-MM-DD'),
+    };
+    const fullDay = d.deducted >= 30;
+    const adv = await this.users.advance12DayCycle(tid, { incrementDay: fullDay });
 
     await ctx.answerCbQuery();
-    await ctx.reply(t(lang, 'cycle.done'));
+    if (fullDay && !adv.switched) {
+      await ctx.reply(
+        t(lang, 'cycle.day_complete')
+          .replace('{prayer}', this.prayerName(lang, adv.prayer))
+          .replace('{day}', String(adv.day)),
+      );
+    }
     await ctx.reply(
       t(lang, 'cycle.deducted')
         .replace('{prayer}', this.prayerName(lang, d.prayer))
@@ -461,7 +673,6 @@ export class BotUpdate {
       await ctx.reply(
         t(lang, 'cycle.switched').replace('{prayer}', prayerName).replace('{next}', nextName),
       );
-      await ctx.reply(t(lang, 'cycle.niyyah').replace('{prayer}', nextName));
     }
     await this.checkin(ctx);
   }
@@ -506,10 +717,19 @@ export class BotUpdate {
     const plannedYears = state.selected_years ?? 0;
     const totalPlannedPrayers = Math.max(0, plannedYears * 1825);
     const completedPrayers = Math.max(0, totalPlannedPrayers - debt.remainingTotal);
-    const completedApproxYears = Math.floor(completedPrayers / 1825);
-    const completedApproxMonths = Math.floor(((completedPrayers % 1825) / 1825) * 12);
+    // "12 күн = 1 жыл" әдісі бойынша жуықтау: 12 күн × 30 = 360.
+    const METHOD_YEAR = 360;
+    const METHOD_MONTH = 30; // 30 қаза (яғни бір күндік норма) ≈ 1 ай ретінде көрсетеміз
+    const completedApproxYears = Math.floor(completedPrayers / METHOD_YEAR);
+    const completedApproxMonths = Math.min(
+      11,
+      Math.floor((completedPrayers % METHOD_YEAR) / METHOD_MONTH),
+    );
     const progressPct =
       totalPlannedPrayers > 0 ? Math.min(100, Math.floor((completedPrayers / totalPlannedPrayers) * 100)) : 0;
+    const barLen = 10;
+    const filled = Math.round((progressPct / 100) * barLen);
+    const bar = '█'.repeat(Math.max(0, Math.min(barLen, filled))) + '░'.repeat(Math.max(0, barLen - filled));
     const completedYmText =
       lang === 'kk'
         ? `${completedApproxYears} жыл ${completedApproxMonths} ай`
@@ -518,8 +738,8 @@ export class BotUpdate {
 
     const text =
       lang === 'kk'
-        ? `📊 Жеке статистика\n\n🎯 Жоспар: ${plannedYears} жыл\n✅ Орындалғаны (шамамен): ${completedYmText}\n📈 Прогресс: ${progressPct}%\n⏳ Қалғаны: ${debt.remainingTotal} намаз\n🔥 Ағымдағы фокус: ${prayerName} (${state.cycle_day}/12)\n\nТаң ${debt.fajr}, Бесін ${debt.dhuhr}, Екінті ${debt.asr}, Ақшам ${debt.maghrib}, Құптан ${debt.isha}`
-        : `📊 Личная статистика\n\n🎯 План: ${plannedYears} лет\n✅ Выполнено (примерно): ${completedYmText}\n📈 Прогресс: ${progressPct}%\n⏳ Осталось: ${debt.remainingTotal} намазов\n🔥 Текущий фокус: ${prayerName} (${state.cycle_day}/12)\n\nФаджр ${debt.fajr}, Зухр ${debt.dhuhr}, Аср ${debt.asr}, Магриб ${debt.maghrib}, Иша ${debt.isha}`;
+        ? `📊 Жеке статистика\n\n🎯 Жоспар: ${plannedYears} жыл\n📈 Прогресс: ${bar} ${progressPct}%\n⏳ Қалғаны: ${debt.remainingTotal} намаз\n🔥 Ағымдағы фокус: ${prayerName} (${state.cycle_day}/12)\n\nТаң ${debt.fajr}, Бесін ${debt.dhuhr}, Екінті ${debt.asr}, Ақшам ${debt.maghrib}, Құптан ${debt.isha}`
+        : `📊 Личная статистика\n\n🎯 План: ${plannedYears} лет\n📈 Прогресс: ${bar} ${progressPct}%\n⏳ Осталось: ${debt.remainingTotal} намазов\n🔥 Текущий фокус: ${prayerName} (${state.cycle_day}/12)\n\nФаджр ${debt.fajr}, Зухр ${debt.dhuhr}, Аср ${debt.asr}, Магриб ${debt.maghrib}, Иша ${debt.isha}`;
     try {
       const image = await this.renderYearHeatmapPng(lang, yearRows);
       await ctx.replyWithPhoto(
@@ -536,7 +756,6 @@ export class BotUpdate {
       );
     }
     await ctx.reply(text);
-    await this.showMenu(ctx, lang);
   }
 
   @Command('help')
@@ -554,9 +773,33 @@ export class BotUpdate {
   async reset(@Ctx() ctx: any) {
     const tid = this.tid(ctx);
     const lang = await this.users.getLanguage(tid);
+    await ctx.reply(
+      t(lang, 'reset.confirm'),
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback(t(lang, 'reset.confirm.yes'), 'reset:yes'),
+          Markup.button.callback(t(lang, 'reset.confirm.no'), 'reset:no'),
+        ],
+      ]),
+    );
+  }
+
+  @Action('reset:yes')
+  async resetYes(@Ctx() ctx: any) {
+    const tid = this.tid(ctx);
+    const lang = await this.users.getLanguage(tid);
+    await ctx.answerCbQuery();
     await this.users.resetProgress(tid);
     await ctx.reply(t(lang, 'reset.done'));
     await this.setup(ctx);
+  }
+
+  @Action('reset:no')
+  async resetNo(@Ctx() ctx: any) {
+    const tid = this.tid(ctx);
+    const lang = await this.users.getLanguage(tid);
+    await ctx.answerCbQuery();
+    await this.showMenu(ctx, lang);
   }
 
   @Action('noop')
@@ -569,11 +812,17 @@ export class BotUpdate {
     const tid = this.tid(ctx);
     const lang = await this.users.getLanguage(tid);
     const text = String(ctx.message?.text ?? '').trim();
+    const low = text.toLowerCase();
     ctx.session = ctx.session ?? {};
 
     if (!ctx.session.setupStep) {
+      // Be resilient to old/legacy keyboard labels that users may still have cached.
+      if (low === '/method' || low.includes('әдіс') || low.includes('метод')) {
+        await this.method(ctx);
+        return;
+      }
       if (text === t(lang, 'menu.setup')) {
-        await this.setup(ctx);
+        await this.settings(ctx);
         return;
       }
       if (text === t(lang, 'menu.checkin')) {
@@ -609,7 +858,6 @@ export class BotUpdate {
       await this.users.markSetupCompleted(tid);
       const debt = await this.users.getDebtState(tid);
       delete ctx.session.setupStep;
-      await ctx.reply(t(lang, 'setup.saved'));
       await ctx.reply(
         t(lang, 'setup.debt.initial')
           .replace('{fajr}', String(debt.fajr))
@@ -649,7 +897,6 @@ export class BotUpdate {
           await ctx.reply(
             t(lang, 'cycle.switched').replace('{prayer}', prayerName).replace('{next}', nextName),
           );
-          await ctx.reply(t(lang, 'cycle.niyyah').replace('{prayer}', nextName));
           await this.checkin(ctx);
           return;
         }
@@ -660,9 +907,12 @@ export class BotUpdate {
         );
         return;
       }
-      await this.checkins.addPrayerToToday(tid, state.current_prayer, d.deducted);
+      const dateYmd = String(ctx.session.manualDateYmd ?? dayjs().format('YYYY-MM-DD'));
+      await this.checkins.addPrayerByDate(tid, dateYmd, state.current_prayer, d.deducted);
+      ctx.session.lastAction = { prayer: state.current_prayer, n: d.deducted, dateYmd };
       const adv = await this.users.advance12DayCycle(tid, { incrementDay: false });
       delete ctx.session.setupStep;
+      delete ctx.session.manualDateYmd;
       await ctx.reply(
         t(lang, 'cycle.deducted')
           .replace('{prayer}', this.prayerName(lang, state.current_prayer))
@@ -675,7 +925,6 @@ export class BotUpdate {
         await ctx.reply(
           t(lang, 'cycle.switched').replace('{prayer}', prayerName).replace('{next}', nextName),
         );
-        await ctx.reply(t(lang, 'cycle.niyyah').replace('{prayer}', nextName));
       }
       await this.checkin(ctx);
       return;

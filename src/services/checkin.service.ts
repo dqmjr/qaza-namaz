@@ -119,7 +119,7 @@ export class CheckinService {
 
     await this.db.query(
       `UPDATE checkins
-       SET ${prayer} = ${prayer} + $1
+       SET ${prayer} = GREATEST(0, ${prayer} + $1)
        WHERE user_id = $2 AND date = $3::date`,
       [delta, userId, dateYmd],
     );
@@ -202,6 +202,18 @@ export class CheckinService {
       date: r.date,
       total: (r.fajr ?? 0) + (r.dhuhr ?? 0) + (r.asr ?? 0) + (r.maghrib ?? 0) + (r.isha ?? 0) + (r.manual_count ?? 0),
     }));
+  }
+
+  async getLastCheckinDate(telegramId: string): Promise<string | null> {
+    const userId = await this.userIdByTelegram(telegramId);
+    const res = await this.db.query<{ date: string }>(
+      `SELECT to_char(MAX(date), 'YYYY-MM-DD') as date
+       FROM checkins
+       WHERE user_id = $1`,
+      [userId],
+    );
+    const d = res.rows[0]?.date;
+    return d && d !== '' ? d : null;
   }
 }
 
